@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+     <OutDir>bin\</OutDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="RABase">
+      <HintPath>I:\RightAngle\bin\RABase.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>
