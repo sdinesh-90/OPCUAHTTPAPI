@@ -33,7 +33,9 @@ class TrumpfOPCUA : IPgmState, IInitializable, IWhiteboard {
          if (File.Exists (settingsPath))
             mSettings = JsonSerializer.Deserialize<Settings> (File.ReadAllText (settingsPath));
          // Load default settings if no file is found
+         bool saveSettings = mSettings == null;
          mSettings ??= new (23591, 1);
+         if (saveSettings) File.WriteAllText (settingsPath, JsonSerializer.Serialize (mSettings));
          mTimer.Start ();
          mTimer.Elapsed += OnTimerElapsed;
       }
@@ -77,7 +79,7 @@ class TrumpfOPCUA : IPgmState, IInitializable, IWhiteboard {
    void SendState (EMCState state) {
       try {
          if (mSettings == null) return;
-         var request = sClient.PutAsJsonAsync ($"https://localhost:{mSettings.PortNumber}/api/OpcUaNode/UpdateNodeValue", new Packet (0, DateTime.Now, state));
+         var request = sClient.PutAsJsonAsync ($"https://localhost:{mSettings.PortNumber}/api/OpcUaNode/UpdateNodeValue", new Packet (0, DateTime.UtcNow, state));
          _ = request.Result;
       } catch (Exception e) {
          Console.WriteLine (e.Message);
