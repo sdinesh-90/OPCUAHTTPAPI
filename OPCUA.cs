@@ -22,7 +22,8 @@ record Packet ([property: JsonPropertyName ("nodeType")] int NodeType,
 // Used in Settings.json
 record Settings ([property: JsonPropertyName ("portNumber")] int PortNumber,
                  // Program end to start interval in second
-                 [property: JsonPropertyName ("pgmEndToStartInterval")] double PgmEndToStartInterval = 1);
+                 [property: JsonPropertyName ("pgmEndToStartInterval")] double PgmEndToStartInterval = 1,
+                 [property: JsonPropertyName ("useHTTPS")] bool UseHTTPS = true);
 
 [Brick]
 class TrumpfOPCUA : IPgmState, IInitializable, IWhiteboard {
@@ -79,7 +80,8 @@ class TrumpfOPCUA : IPgmState, IInitializable, IWhiteboard {
    void SendState (EMCState state) {
       try {
          if (mSettings == null) return;
-         var request = sClient.PutAsJsonAsync ($"https://localhost:{mSettings.PortNumber}/api/OpcUaNode/UpdateNodeValue", new Packet (0, DateTime.UtcNow, state));
+         string url = mSettings.UseHTTPS ? "https" : "http"; 
+         var request = sClient.PutAsJsonAsync ($"{url}://localhost:{mSettings.PortNumber}/api/OpcUaNode/UpdateNodeValue", new Packet (0, DateTime.UtcNow, state));
          _ = request.Result;
       } catch (Exception e) {
          Console.WriteLine (e.Message);
