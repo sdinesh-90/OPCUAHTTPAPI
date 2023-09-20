@@ -53,6 +53,7 @@ class TrumpfOPCUA : IPgmState, IInitializable, IWhiteboard {
       if (Job != null && (quantity < Job.QtyNeeded || quantity < 0))
          Task.Delay ((int)(mSettings.PgmEndToStartInterval * 1000)).ContinueWith (a => RaiseRunning ());
       else mPgmCompleted = true;
+      mOverProduce = false;
    }
 
    public void ProgramStarted (string pgmName, int bendNo, int quantity = -1) {
@@ -61,6 +62,7 @@ class TrumpfOPCUA : IPgmState, IInitializable, IWhiteboard {
          if (bendNo == 0) {
             bool completed = mPgmCompleted;
             mPgmCompleted = false;
+            mOverProduce = Job != null && quantity >= Job.QtyNeeded;
             if (!completed && Job != null && Job.QtyNeeded > 0) {
                DateTime time = DateTime.UtcNow;
                SetState (time, EMCState.Aborted);
@@ -79,10 +81,10 @@ class TrumpfOPCUA : IPgmState, IInitializable, IWhiteboard {
       SetState (time, EMCState.Running);
       ClearState (time, EMCState.Aborted, EMCState.Stopped, EMCState.StoppedMalfunction, EMCState.StoppedOperator, EMCState.Ended);
    }
-   bool mPgmCompleted;
+   bool mPgmCompleted, mOverProduce;
 
    public void ProgramStopped (string pgmName, int bendNo, int quantity = -1) {
-      if (mPgmCompleted) return;
+      if (Job != null && quantity >= Job.QtyNeeded && !mOverProduce) return;
       DateTime time = DateTime.UtcNow;
       SetState (time, EMCState.Stopped, MachineStatus.IsInError ? EMCState.StoppedMalfunction : EMCState.StoppedOperator);
       ClearState (time, EMCState.Running, EMCState.Aborted, EMCState.Ended);
