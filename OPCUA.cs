@@ -46,15 +46,15 @@ class TrumpfOPCUA : IPgmState, IInitializable, IWhiteboard {
       if (mSettings == null) return;
       var states = new List<EMCState> ();
       states.Add (EMCState.Ended);
-      mCurrentQuantity = quantity;
-      states.Add (EMCState.CurrentQuantity);
-      if (Job?.QtyNeeded == mCurrentQuantity) {
+      if (Job?.QtyNeeded != mTargetQuantity) {
          mTargetQuantity = Job.QtyNeeded;
          states.Add (EMCState.TargetQuantity);
       }
       DateTime time = DateTime.UtcNow;
+      mCurrentQuantity = quantity;
+      states.Add (EMCState.CurrentQuantity);
       SetState (time, states.ToArray ());
-      ClearState (time, EMCState.Running, EMCState.Aborted, EMCState.Stopped, EMCState.StoppedMalfunction, EMCState.StoppedOperator, EMCState.ProgName);
+      ClearState (time, EMCState.Running, EMCState.Aborted, EMCState.Stopped, EMCState.StoppedMalfunction, EMCState.StoppedOperator);
       if (Job != null && (quantity < Job.QtyNeeded || quantity < 0))
          Task.Delay ((int)(mSettings.PgmEndToStartInterval * 1000)).ContinueWith (a => RaiseRunning ());
       else mPgmCompleted = true;
@@ -64,15 +64,18 @@ class TrumpfOPCUA : IPgmState, IInitializable, IWhiteboard {
    public void ProgramStarted (string pgmName, int bendNo, int quantity = -1) {
       if (mSettings == null) return;
       if (MachineStatus.Mode is EOperatingMode.SemiAuto or EOperatingMode.Auto) {
+         mProgName = pgmName;
+         mCurrentQuantity = quantity;
+         mTargetQuantity = Job.QtyNeeded;
+         DateTime time = DateTime.UtcNow;
+         SetState (time, EMCState.ProgName, EMCState.CurrentQuantity, EMCState.TargetQuantity);
          if (bendNo == 0) {
             bool completed = mPgmCompleted;
             mPgmCompleted = false;
             mOverProduce = Job != null && quantity >= Job.QtyNeeded;
             if (!completed && Job != null && Job.QtyNeeded > 0) {
-               mProgName = pgmName;
-               mTargetQuantity = Job.QtyNeeded;
-               DateTime time = DateTime.UtcNow;
-               SetState (time, EMCState.ProgName, EMCState.TargetQuantity, EMCState.Aborted);
+               time = DateTime.UtcNow;
+               SetState (time, EMCState.Aborted);
                ClearState (time, EMCState.Running, EMCState.Stopped, EMCState.StoppedMalfunction, EMCState.StoppedOperator, EMCState.Ended);
                Task.Delay ((int)(mSettings.PgmEndToStartInterval * 1000)).ContinueWith (a => RaiseRunning ());
                mPgmCompleted = false;
