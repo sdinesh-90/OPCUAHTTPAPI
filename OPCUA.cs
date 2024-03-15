@@ -64,11 +64,10 @@ class TrumpfOPCUA : IPgmState, IInitializable, IWhiteboard {
    public void ProgramStarted (string pgmName, int bendNo, int quantity = -1) {
       if (mSettings == null) return;
       if (MachineStatus.Mode is EOperatingMode.SemiAuto or EOperatingMode.Auto) {
-         mProgName = pgmName;
          mCurrentQuantity = quantity;
          mTargetQuantity = Job.QtyNeeded;
          DateTime time = DateTime.UtcNow;
-         SetState (time, EMCState.ProgName, EMCState.CurrentQuantity, EMCState.TargetQuantity);
+         SetState (time, EMCState.CurrentQuantity, EMCState.TargetQuantity);
          if (bendNo == 0) {
             bool completed = mPgmCompleted;
             mPgmCompleted = false;
@@ -101,6 +100,12 @@ class TrumpfOPCUA : IPgmState, IInitializable, IWhiteboard {
    }
 
    public void BendChanged (string pgmName, int bendNo) {
+   }
+
+   public void ProgramChanged (string pgmName, EAppState appState) {
+      mProgName = pgmName;
+      DateTime time = DateTime.UtcNow;
+      SetState (time, EMCState.ProgName);
    }
 
    public void Uninitialize () {
