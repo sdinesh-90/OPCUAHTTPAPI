@@ -42,7 +42,7 @@ class TrumpfOPCUA : IPgmState, IInitializable, IWhiteboard {
    }
    static readonly object sLock = new ();
 
-   public void ProgramCompleted (string pgmName, int quantity = -1) {
+   public void ProgramCompleted (string pgmName, int quantity = 0) {
       if (mSettings == null) return;
       var states = new List<EMCState> ();
       states.Add (EMCState.Ended);
@@ -61,7 +61,7 @@ class TrumpfOPCUA : IPgmState, IInitializable, IWhiteboard {
       mOverProduce = false;
    }
 
-   public void ProgramStarted (string pgmName, int bendNo, int quantity = -1) {
+   public void ProgramStarted (string pgmName, int bendNo, int quantity = 0) {
       if (mSettings == null) return;
       if (MachineStatus.Mode is EOperatingMode.SemiAuto or EOperatingMode.Auto) {
          mCurrentQuantity = quantity;
@@ -92,7 +92,7 @@ class TrumpfOPCUA : IPgmState, IInitializable, IWhiteboard {
    }
    bool mPgmCompleted, mOverProduce;
 
-   public void ProgramStopped (string pgmName, int bendNo, int quantity = -1) {
+   public void ProgramStopped (string pgmName, int bendNo, int quantity = 0) {
       if (Job != null && quantity >= Job.QtyNeeded && !mOverProduce) return;
       DateTime time = DateTime.UtcNow;
       SetState (time, EMCState.Stopped, MachineStatus.IsInError ? EMCState.StoppedMalfunction : EMCState.StoppedOperator);
