@@ -64,8 +64,8 @@ class TrumpfOPCUA : IPgmState, IInitializable, IWhiteboard {
    public void ProgramStarted (string pgmName, int bendNo, int quantity = 0) {
       if (mSettings == null) return;
       if (MachineStatus.Mode is EOperatingMode.SemiAuto or EOperatingMode.Auto) {
-         mCurrentQuantity = quantity;
-         mTargetQuantity = Job.QtyNeeded;
+         mCurrentQuantity = quantity < 0 ? 0 : quantity;
+         mTargetQuantity = Job.QtyNeeded < 0 ? 0 : Job.QtyNeeded;
          DateTime time = DateTime.UtcNow;
          SetState (time, EMCState.CurrentQuantity, EMCState.TargetQuantity);
          if (bendNo == 0) {
