@@ -57,6 +57,12 @@ class TrumpfOPCUA : IPgmState, IInitializable, IWhiteboard {
       ClearState (time, EMCState.Running, EMCState.Aborted, EMCState.Stopped, EMCState.StoppedMalfunction, EMCState.StoppedOperator);
       if (Job != null && (quantity < Job.QtyNeeded || quantity < 0))
          Task.Delay ((int)(mSettings.PgmEndToStartInterval * 1000)).ContinueWith (a => RaiseRunning ());
+      else if (Job != null && Job.QtyNeeded <= 0)
+         Task.Delay ((int)(mSettings.PgmEndToStartInterval * 1000)).ContinueWith (a => {
+            DateTime time = DateTime.UtcNow;
+            ClearState (time, EMCState.Ended);
+            SetState (time, EMCState.Running);
+         });
       else mPgmCompleted = true;
       mOverProduce = false;
    }
