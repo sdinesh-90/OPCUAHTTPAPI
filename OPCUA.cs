@@ -7,17 +7,13 @@ using System.Timers;
 namespace OPCUARest;
 
 enum EMCState {
-   Running, Ended, Stopped, StoppedMalfunction, StoppedOperator, Aborted,
+   Running, Ended, Stopped, StoppedMalfunction, StoppedOperator, Aborted, ProgName, TargetQuantity, CurrentQuantity
 }
 
 record Packet ([property: JsonPropertyName ("nodeType")] int NodeType,
-                  [property: JsonPropertyName ("updateTime")] DateTime Time,
-                  [property: JsonIgnore] EMCState State) {
-   [JsonPropertyName ("nodeName")]
-   public string NodeName => $"35.{State}";
-   [JsonPropertyName ("nodeValue")]
-   public string Value { get; set; } = "true";
-}
+               [property: JsonPropertyName ("updateTime")] DateTime Time,
+               [property: JsonPropertyName ("nodeName")] string Name,
+               [property: JsonPropertyName ("nodeValue")] string Value);
 
 // Used in Settings.json
 record Settings ([property: JsonPropertyName ("portNumber")] int PortNumber,
@@ -46,25 +42,45 @@ class TrumpfOPCUA : IPgmState, IInitializable, IWhiteboard {
    }
    static readonly object sLock = new ();
 
-   public void ProgramCompleted (string pgmName, int quantity = -1) {
+   public void ProgramCompleted (string pgmName, int quantity = 0) {
       if (mSettings == null) return;
+      var states = new List<EMCState> {
+         EMCState.Ended
+      };
+      if (Job != null && Job.QtyNeeded != mTargetQuantity) {
+         mTargetQuantity = Job.QtyNeeded;
+         states.Add (EMCState.TargetQuantity);
+      }
       DateTime time = DateTime.UtcNow;
-      SetState (time, EMCState.Ended); ClearState (time, EMCState.Running, EMCState.Aborted, EMCState.Stopped, EMCState.StoppedMalfunction, EMCState.StoppedOperator);
+      mCurrentQuantity = quantity;
+      states.Add (EMCState.CurrentQuantity);
+      SetState (time, [.. states]);
+      ClearState (time, EMCState.Running, EMCState.Aborted, EMCState.Stopped, EMCState.StoppedMalfunction, EMCState.StoppedOperator);
       if (Job != null && (quantity < Job.QtyNeeded || quantity < 0))
          Task.Delay ((int)(mSettings.PgmEndToStartInterval * 1000)).ContinueWith (a => RaiseRunning ());
+      else if (Job != null && Job.QtyNeeded <= 0)
+         Task.Delay ((int)(mSettings.PgmEndToStartInterval * 1000)).ContinueWith (a => {
+            DateTime time = DateTime.UtcNow;
+            ClearState (time, EMCState.Ended);
+            SetState (time, EMCState.Running);
+         });
       else mPgmCompleted = true;
       mOverProduce = false;
    }
 
-   public void ProgramStarted (string pgmName, int bendNo, int quantity = -1) {
+   public void ProgramStarted (string pgmName, int bendNo, int quantity = 0) {
       if (mSettings == null) return;
       if (MachineStatus.Mode is EOperatingMode.SemiAuto or EOperatingMode.Auto) {
+         mCurrentQuantity = quantity < 0 ? 0 : quantity;
+         mTargetQuantity = Job == null || Job.QtyNeeded < 0 ? 0 : Job.QtyNeeded;
+         DateTime time = DateTime.UtcNow;
+         SetState (time, EMCState.CurrentQuantity, EMCState.TargetQuantity);
          if (bendNo == 0) {
             bool completed = mPgmCompleted;
             mPgmCompleted = false;
             mOverProduce = Job != null && quantity >= Job.QtyNeeded;
             if (!completed && Job != null && Job.QtyNeeded > 0) {
-               DateTime time = DateTime.UtcNow;
+               time = DateTime.UtcNow;
                SetState (time, EMCState.Aborted);
                ClearState (time, EMCState.Running, EMCState.Stopped, EMCState.StoppedMalfunction, EMCState.StoppedOperator, EMCState.Ended);
                Task.Delay ((int)(mSettings.PgmEndToStartInterval * 1000)).ContinueWith (a => RaiseRunning ());
@@ -75,7 +91,7 @@ class TrumpfOPCUA : IPgmState, IInitializable, IWhiteboard {
          RaiseRunning ();
       }
    }
-   
+
    void RaiseRunning () {
       DateTime time = DateTime.UtcNow;
       SetState (time, EMCState.Running);
@@ -83,14 +99,20 @@ class TrumpfOPCUA : IPgmState, IInitializable, IWhiteboard {
    }
    bool mPgmCompleted, mOverProduce;
 
-   public void ProgramStopped (string pgmName, int bendNo, int quantity = -1) {
+   public void ProgramStopped (string pgmName, int bendNo, int quantity = 0) {
       if (Job != null && quantity >= Job.QtyNeeded && !mOverProduce) return;
       DateTime time = DateTime.UtcNow;
       SetState (time, EMCState.Stopped, MachineStatus.IsInError ? EMCState.StoppedMalfunction : EMCState.StoppedOperator);
-      ClearState (time, EMCState.Running, EMCState.Aborted, EMCState.Ended);
+      ClearState (time, EMCState.Running, EMCState.Aborted, EMCState.Ended, EMCState.ProgName);
    }
 
    public void BendChanged (string pgmName, int bendNo) {
+   }
+
+   public void ProgramChanged (string pgmName, EAppState appState) {
+      mProgName = pgmName;
+      DateTime time = DateTime.UtcNow;
+      SetState (time, EMCState.ProgName);
    }
 
    public void Uninitialize () {
@@ -111,11 +133,11 @@ class TrumpfOPCUA : IPgmState, IInitializable, IWhiteboard {
    #region Implementation -------------------------------------------
    string SettingsPath => Path.Combine (Environment.DataFolder, "opcua-settings.json");
 
-   void SendState (EMCState state, bool value, DateTime time) {
+   void SendState (string value, string name, int nodeType, DateTime time) {
       try {
          if (mSettings == null) return;
-         string url = mSettings.UseHTTPS ? "https" : "http"; 
-         var request = sClient.PutAsJsonAsync ($"{url}://localhost:{mSettings.PortNumber}/api/OpcUaNode/UpdateNodeValue", new Packet (0, time, state) { Value = value ? "true" : "false" });
+         string url = mSettings.UseHTTPS ? "https" : "http";
+         var request = sClient.PutAsJsonAsync ($"{url}://localhost:{mSettings.PortNumber}/api/OpcUaNode/UpdateNodeValue", new Packet (nodeType, time, name, value));
          _ = request.Result;
       } catch (Exception e) {
          Console.WriteLine (e.Message);
@@ -135,13 +157,33 @@ class TrumpfOPCUA : IPgmState, IInitializable, IWhiteboard {
    // Create an HttpClientHandler object and set to use default credentials
    static readonly HttpClient sClient = new ();
    Settings? mSettings;
+   string mProgName = "";
+   int mTargetQuantity = 0;
+   int mCurrentQuantity = 0;
 
-   void SetState (DateTime time, params EMCState[] states) 
-      => Task.Run (() => { foreach (var state in states) SendState (state, true, time); });
+   void SetState (DateTime time, params EMCState[] states)
+      => Task.Run (() => {
+         foreach (var state in states) {
+            (int type, string name, string value) = GetValues (state);
+            SendState (value, name, type, time);
+         }
+      });
 
    void ClearState (DateTime time, params EMCState[] states)
-      => Task.Run (() => { foreach (var state in states) SendState (state, false, time); });
+      => Task.Run (() => {
+         foreach (var state in states) {
+            (int type, string name, string value) = GetValues (state, true);
+            SendState (value, name, type, time);
+         }
+      });
 
+   (int type, string name, string value) GetValues (EMCState state, bool isClear = false) =>
+       state switch {
+          EMCState.ProgName => (3, "32", isClear ? "" : mProgName),
+          EMCState.TargetQuantity => (2, "12", isClear ? "0" : mTargetQuantity.ToString ()),
+          EMCState.CurrentQuantity => (2, "13", isClear ? "0" : mCurrentQuantity.ToString ()),
+          _ => (0, $"35.{state}", isClear ? "false" : "true")
+       };
    readonly System.Timers.Timer mTimer = new (); // Timer to continuously log data
    #endregion
 }
