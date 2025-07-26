@@ -44,16 +44,17 @@ class TrumpfOPCUA : IPgmState, IInitializable, IWhiteboard {
 
    public void ProgramCompleted (string pgmName, int quantity = 0) {
       if (mSettings == null) return;
-      var states = new List<EMCState> ();
-      states.Add (EMCState.Ended);
-      if (Job?.QtyNeeded != mTargetQuantity) {
+      var states = new List<EMCState> {
+         EMCState.Ended
+      };
+      if (Job != null && Job.QtyNeeded != mTargetQuantity) {
          mTargetQuantity = Job.QtyNeeded;
          states.Add (EMCState.TargetQuantity);
       }
       DateTime time = DateTime.UtcNow;
       mCurrentQuantity = quantity;
       states.Add (EMCState.CurrentQuantity);
-      SetState (time, states.ToArray ());
+      SetState (time, [.. states]);
       ClearState (time, EMCState.Running, EMCState.Aborted, EMCState.Stopped, EMCState.StoppedMalfunction, EMCState.StoppedOperator);
       if (Job != null && (quantity < Job.QtyNeeded || quantity < 0))
          Task.Delay ((int)(mSettings.PgmEndToStartInterval * 1000)).ContinueWith (a => RaiseRunning ());
@@ -71,7 +72,7 @@ class TrumpfOPCUA : IPgmState, IInitializable, IWhiteboard {
       if (mSettings == null) return;
       if (MachineStatus.Mode is EOperatingMode.SemiAuto or EOperatingMode.Auto) {
          mCurrentQuantity = quantity < 0 ? 0 : quantity;
-         mTargetQuantity = Job.QtyNeeded < 0 ? 0 : Job.QtyNeeded;
+         mTargetQuantity = Job == null || Job.QtyNeeded < 0 ? 0 : Job.QtyNeeded;
          DateTime time = DateTime.UtcNow;
          SetState (time, EMCState.CurrentQuantity, EMCState.TargetQuantity);
          if (bendNo == 0) {
