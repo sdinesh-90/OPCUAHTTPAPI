@@ -33,9 +33,6 @@ class TrumpfOPCUA : IPgmState, IInitializable, IWhiteboard {
          bool saveSettings = mSettings == null;
          mSettings ??= new (23591, 1);
          if (saveSettings) File.WriteAllText (settingsPath, JsonSerializer.Serialize (mSettings));
-         System.Net.ServicePointManager.SecurityProtocol |= System.Net.SecurityProtocolType.Tls12 |
-                                                            System.Net.SecurityProtocolType.Tls11 |
-                                                            System.Net.SecurityProtocolType.Tls;
          mTimer.Start ();
          mTimer.Elapsed += OnTimerElapsed;
       }
